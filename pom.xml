@@ -10,8 +10,8 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>war</packaging>
 
-    <name>Smart Campus Sensor & Room Management API</name>
-    <description>JAX-RS RESTful API for Smart Campus Sensor & Room Management</description>
+    <name>Smart Campus Sensor &amp; Room Management API</name>
+    <description>JAX-RS RESTful API for Smart Campus Sensor &amp; Room Management</description>
 
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
@@ -75,7 +75,6 @@
 
     <build>
         <plugins>
-            <!-- Maven Compiler Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -86,7 +85,6 @@
                 </configuration>
             </plugin>
 
-            <!-- Maven War Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-war-plugin</artifactId>
@@ -94,6 +92,12 @@
                 <configuration>
                     <failOnMissingWebXml>false</failOnMissingWebXml>
                 </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
             </plugin>
         </plugins>
     </build>
