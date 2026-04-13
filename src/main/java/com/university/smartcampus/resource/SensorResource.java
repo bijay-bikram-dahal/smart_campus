@@ -1,15 +1,24 @@
 package com.university.smartcampus.resource;
 
 import com.university.smartcampus.exception.LinkedResourceNotFoundException;
-import com.university.smartcampus.exception.SensorUnavailableException;
 import com.university.smartcampus.model.Sensor;
 import com.university.smartcampus.service.InMemoryStorage;
-
 import jakarta.inject.Inject;
-import jakarta.ws.rs.*;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import java.net.URI;
+import java.util.Locale;
 import java.util.List;
 
 @Path("/sensors")
@@ -20,79 +29,101 @@ public class SensorResource {
     @Inject
     private InMemoryStorage storage;
 
-    // GET /api/v1/sensors - Get all sensors (with optional type filter)
+    public SensorResource() {
+    }
+
+    SensorResource(InMemoryStorage storage) {
+        this.storage = storage;
+    }
+
     @GET
     public Response getAllSensors(@QueryParam("type") String type) {
         List<Sensor> sensors;
-        if (type != null && !type.isEmpty()) {
-            sensors = storage.getSensorsByType(type);
+        if (type != null && !type.isBlank()) {
+            sensors = storage().getSensorsByType(type.trim());
         } else {
-            sensors = storage.getAllSensors();
+            sensors = storage().getAllSensors();
         }
         return Response.ok(sensors).build();
     }
 
-    // POST /api/v1/sensors - Create a new sensor
     @POST
     public Response createSensor(Sensor sensor) {
-        // Validate that the room exists
-        if (!storage.roomExists(sensor.getRoomId())) {
+        validateSensor(sensor);
+        if (!storage().roomExists(sensor.getRoomId())) {
             throw new LinkedResourceNotFoundException(
-                    "Room with ID: " + sensor.getRoomId() + " does not exist. Cannot link sensor to non-existent room.");
+                    "Room with ID: " + sensor.getRoomId() + " does not exist. Cannot link sensor to a non-existent room."
+            );
         }
 
-        Sensor createdSensor = storage.createSensor(sensor);
-        // Link the sensor to the room
-        storage.addSensorToRoom(sensor.getRoomId(), createdSensor.getId());
-        return Response.status(Response.Status.CREATED)
+        sensor.setType(sensor.getType().trim());
+        sensor.setStatus(sensor.getStatus().trim().toUpperCase(Locale.ROOT));
+        sensor.setRoomId(sensor.getRoomId().trim());
+
+        Sensor createdSensor = storage().createSensor(sensor);
+        storage().addSensorToRoom(createdSensor.getRoomId(), createdSensor.getId());
+        return Response.created(URI.create("/api/v1/sensors/" + createdSensor.getId()))
                 .entity(createdSensor)
                 .build();
     }
 
-    // GET /api/v1/sensors/{sensorId} - Get a specific sensor
     @GET
     @Path("/{sensorId}")
     public Response getSensor(@PathParam("sensorId") String sensorId) {
-        Sensor sensor = storage.getSensor(sensorId);
+        Sensor sensor = storage().getSensor(sensorId);
         if (sensor == null) {
-            return Response.status(Response.Status.NOT_FOUND)
-                    .entity("Sensor not found with ID: " + sensorId)
-                    .build();
+            throw new NotFoundException("Sensor not found with ID: " + sensorId);
         }
         return Response.ok(sensor).build();
     }
 
-    // DELETE /api/v1/sensors/{sensorId} - Delete a sensor
     @DELETE
     @Path("/{sensorId}")
     public Response deleteSensor(@PathParam("sensorId") String sensorId) {
-        Sensor sensor = storage.getSensor(sensorId);
+        Sensor sensor = storage().getSensor(sensorId);
         if (sensor == null) {
-            return Response.status(Response.Status.NOT_FOUND)
-                    .entity("Sensor not found with ID: " + sensorId)
-                    .build();
+            throw new NotFoundException("Sensor not found with ID: " + sensorId);
         }
 
-        // Remove sensor from room
-        storage.removeSensorFromRoom(sensor.getRoomId(), sensorId);
-
-        // Delete sensor
-        boolean deleted = storage.deleteSensor(sensorId);
+        storage().removeSensorFromRoom(sensor.getRoomId(), sensorId);
+        boolean deleted = storage().deleteSensor(sensorId);
         if (!deleted) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity("Failed to delete sensor")
-                    .build();
+            throw new IllegalStateException("Failed to delete sensor with ID: " + sensorId);
         }
         return Response.noContent().build();
     }
 
-    // Sub-resource locator for sensor readings
     @Path("{sensorId}/readings")
     public SensorReadingResource getSensorReadingResource(@PathParam("sensorId") String sensorId) {
-        // Verify sensor exists
-        if (storage.getSensor(sensorId) == null) {
+        if (storage().getSensor(sensorId) == null) {
             throw new NotFoundException("Sensor not found with ID: " + sensorId);
         }
-        return new SensorReadingResource(sensorId, storage);
+        return new SensorReadingResource(sensorId, storage());
+    }
+
+    private InMemoryStorage storage() {
+        if (storage == null) {
+            throw new IllegalStateException("InMemoryStorage was not injected.");
+        }
+        return storage;
+    }
+
+    private void validateSensor(Sensor sensor) {
+        if (sensor == null) {
+            throw new BadRequestException("Sensor payload is required.");
+        }
+        if (sensor.getType() == null || sensor.getType().isBlank()) {
+            throw new BadRequestException("Sensor type is required.");
+        }
+        if (sensor.getStatus() == null || sensor.getStatus().isBlank()) {
+            throw new BadRequestException("Sensor status is required.");
+        }
+        String normalizedStatus = sensor.getStatus().trim().toUpperCase(Locale.ROOT);
+        if (!List.of("ACTIVE", "MAINTENANCE", "OFFLINE").contains(normalizedStatus)) {
+            throw new BadRequestException("Sensor status must be ACTIVE, MAINTENANCE, or OFFLINE.");
+        }
+        if (sensor.getRoomId() == null || sensor.getRoomId().isBlank()) {
+            throw new BadRequestException("Sensor roomId is required.");
+        }
     }
 }

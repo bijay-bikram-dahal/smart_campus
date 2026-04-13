@@ -4,12 +4,16 @@ import com.university.smartcampus.exception.SensorUnavailableException;
 import com.university.smartcampus.model.Sensor;
 import com.university.smartcampus.model.SensorReading;
 import com.university.smartcampus.service.InMemoryStorage;
-
-import jakarta.inject.Inject;
-import jakarta.ws.rs.*;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import java.net.URI;
 import java.util.List;
 
 public class SensorReadingResource {
@@ -22,7 +26,6 @@ public class SensorReadingResource {
         this.storage = storage;
     }
 
-    // GET /api/v1/sensors/{sensorId}/readings - Get sensor reading history
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     public Response getSensorReadings() {
@@ -30,32 +33,32 @@ public class SensorReadingResource {
         return Response.ok(readings).build();
     }
 
-    // POST /api/v1/sensors/{sensorId}/readings - Add a new sensor reading
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response addSensorReading(SensorReading reading) {
-        // Check if sensor exists and is not in MAINTENANCE status
+        validateReading(reading);
         Sensor sensor = storage.getSensor(sensorId);
         if (sensor == null) {
-            return Response.status(Response.Status.NOT_FOUND)
-                    .entity("Sensor not found with ID: " + sensorId)
-                    .build();
+            throw new NotFoundException("Sensor not found with ID: " + sensorId);
         }
 
         if ("MAINTENANCE".equalsIgnoreCase(sensor.getStatus())) {
-            throw new SensorUnavailableException("Sensor with ID: " + sensorId +
-                    " is currently in MAINTENANCE status and cannot accept new readings.");
+            throw new SensorUnavailableException(
+                    "Sensor with ID: " + sensorId + " is in MAINTENANCE status and cannot accept new readings."
+            );
         }
 
-        // Add the reading
         SensorReading savedReading = storage.addSensorReading(sensorId, reading);
-
-        // Update the sensor's current value for consistency
-        storage.updateSensorCurrentValue(sensorId, reading.getValue());
-
-        return Response.status(Response.Status.CREATED)
+        storage.updateSensorCurrentValue(sensorId, savedReading.getValue());
+        return Response.created(URI.create("/api/v1/sensors/" + sensorId + "/readings/" + savedReading.getId()))
                 .entity(savedReading)
                 .build();
+    }
+
+    private void validateReading(SensorReading reading) {
+        if (reading == null) {
+            throw new BadRequestException("Sensor reading payload is required.");
+        }
     }
 }
