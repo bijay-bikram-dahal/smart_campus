@@ -61,6 +61,16 @@ class RoomResourceTest {
     }
 
     @Test
+    void deleteEmptyRoomReturnsNoContentAndSecondDeleteIsNotFound() {
+        storage.createRoom(new Room("TMP-101", "Temporary Seminar Room", 12));
+
+        Response response = roomResource.deleteRoom("TMP-101");
+
+        assertEquals(Response.Status.NO_CONTENT.getStatusCode(), response.getStatus());
+        assertThrows(NotFoundException.class, () -> roomResource.deleteRoom("TMP-101"));
+    }
+
+    @Test
     void getRoomThrowsNotFoundForMissingRoom() {
         assertThrows(NotFoundException.class, () -> roomResource.getRoom("missing-room"));
     }

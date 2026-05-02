@@ -5,10 +5,10 @@ This project implements the coursework brief for `5COSC022W Client-Server Archit
 
 The implementation keeps all data in memory, uses a singleton storage service for shared state, and applies JAX-RS exception mappers and filters to keep the API predictable, observable, and safe.
 
-Base URL after deployment:
+Base URL when launched with the embedded server:
 
 ```text
-http://localhost:8080/smartcampus/api/v1
+http://localhost:8080/api/v1
 ```
 
 ## Technology Stack
@@ -46,13 +46,36 @@ This produces:
 target/smartcampus-1.0-SNAPSHOT.war
 ```
 
-### Run
-Deploy `target/smartcampus-1.0-SNAPSHOT.war` to Tomcat 10.1+ (or another Jakarta Servlet 6 compatible container).
+### Run with the embedded server
+```bash
+mvn exec:java
+```
 
-If deployed to a default Tomcat instance, the API is available at:
+The server starts at:
 
 ```text
-http://localhost:8080/smartcampus/api/v1
+http://localhost:8080/api/v1
+```
+
+If port `8080` is already in use, the launcher automatically retries the next available port unless an explicit port is supplied. To force a specific port:
+
+```bash
+mvn exec:java -Dsmartcampus.port=8081
+```
+
+### Run with Tomcat
+Deploy `target/smartcampus-1.0-SNAPSHOT.war` to Tomcat 10.1+ (or another Jakarta Servlet 6 compatible container).
+
+The WAR maps the Jersey servlet under `/api/v1/*`. The final URL therefore depends on the Tomcat context path. For example:
+
+```text
+http://localhost:8080/smartcampus-1.0-SNAPSHOT/api/v1
+```
+
+If the WAR is deployed as the root application, the URL is:
+
+```text
+http://localhost:8080/api/v1
 ```
 
 ## Endpoint Summary
@@ -79,69 +102,99 @@ http://localhost:8080/smartcampus/api/v1
 
 ## Sample curl Commands
 
+The commands below are ordered so they can be used as a short demonstration sequence. They use Windows command continuation (`^`). On macOS or Linux, replace `^` with `\`.
+
 ### 1. Discovery endpoint
 ```bash
-curl -X GET http://localhost:8080/smartcampus/api/v1
+curl -X GET http://localhost:8080/api/v1
 ```
 
 ### 2. Create a room
 ```bash
-curl -X POST http://localhost:8080/smartcampus/api/v1/rooms ^
+curl -X POST http://localhost:8080/api/v1/rooms ^
   -H "Content-Type: application/json" ^
   -d "{\"id\":\"LIB-301\",\"name\":\"Library Quiet Study\",\"capacity\":20}"
 ```
 
 ### 3. Get all rooms
 ```bash
-curl -X GET http://localhost:8080/smartcampus/api/v1/rooms
+curl -X GET http://localhost:8080/api/v1/rooms
 ```
 
 ### 4. Get a room by ID
 ```bash
-curl -X GET http://localhost:8080/smartcampus/api/v1/rooms/LIB-301
+curl -X GET http://localhost:8080/api/v1/rooms/LIB-301
 ```
 
 ### 5. Create a valid sensor
 ```bash
-curl -X POST http://localhost:8080/smartcampus/api/v1/sensors ^
+curl -X POST http://localhost:8080/api/v1/sensors ^
   -H "Content-Type: application/json" ^
   -d "{\"id\":\"TEMP-001\",\"type\":\"Temperature\",\"status\":\"ACTIVE\",\"currentValue\":22.5,\"roomId\":\"LIB-301\"}"
 ```
 
 ### 6. Show 422 for a sensor linked to a missing room
 ```bash
-curl -X POST http://localhost:8080/smartcampus/api/v1/sensors ^
+curl -X POST http://localhost:8080/api/v1/sensors ^
   -H "Content-Type: application/json" ^
   -d "{\"id\":\"CO2-404\",\"type\":\"CO2\",\"status\":\"ACTIVE\",\"currentValue\":450.0,\"roomId\":\"MISSING-ROOM\"}"
 ```
 
 ### 7. Filter sensors by type
 ```bash
-curl -X GET "http://localhost:8080/smartcampus/api/v1/sensors?type=Temperature"
+curl -X GET "http://localhost:8080/api/v1/sensors?type=Temperature"
 ```
 
 ### 8. Add a reading to a sensor
 ```bash
-curl -X POST http://localhost:8080/smartcampus/api/v1/sensors/TEMP-001/readings ^
+curl -X POST http://localhost:8080/api/v1/sensors/TEMP-001/readings ^
   -H "Content-Type: application/json" ^
   -d "{\"value\":23.7}"
 ```
 
 ### 9. Get reading history
 ```bash
-curl -X GET http://localhost:8080/smartcampus/api/v1/sensors/TEMP-001/readings
+curl -X GET http://localhost:8080/api/v1/sensors/TEMP-001/readings
 ```
 
 ### 10. Show 403 when posting to a sensor in maintenance
+First create a maintenance sensor in an existing room:
+
 ```bash
-curl -X POST http://localhost:8080/smartcampus/api/v1/sensors/MAINT-001/readings ^
+curl -X POST http://localhost:8080/api/v1/sensors ^
+  -H "Content-Type: application/json" ^
+  -d "{\"id\":\"MAINT-001\",\"type\":\"Temperature\",\"status\":\"MAINTENANCE\",\"currentValue\":18.0,\"roomId\":\"LIB-301\"}"
+```
+
+Then attempt to append a reading:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/sensors/MAINT-001/readings ^
   -H "Content-Type: application/json" ^
   -d "{\"value\":19.5}"
 ```
 
-### 11. Show 409 when deleting an occupied room
+### 11. Show successful room deletion
 ```bash
-curl -X DELETE http://localhost:8080/smartcampus/api/v1/rooms/LIB-301
+curl -X POST http://localhost:8080/api/v1/rooms ^
+  -H "Content-Type: application/json" ^
+  -d "{\"id\":\"TMP-101\",\"name\":\"Temporary Seminar Room\",\"capacity\":12}"
+```
+
+```bash
+curl -X DELETE http://localhost:8080/api/v1/rooms/TMP-101
+```
+
+### 12. Show 409 when deleting an occupied room
+```bash
+curl -X DELETE http://localhost:8080/api/v1/rooms/LIB-301
+```
+
+### 13. Show 415 for an unsupported request content type
+```bash
+curl -X POST http://localhost:8080/api/v1/rooms ^
+  -H "Content-Type: text/plain" ^
+  -d "LIB-302"
 ```
 
 ## Error Handling Summary
@@ -165,6 +218,36 @@ Current automated coverage includes:
 - `SensorResourceTest`: validates room-link integrity checks, sensor creation, room back-linking, and type filtering.
 - `SensorReadingResourceTest`: validates reading creation, reading history retrieval, current-value synchronization, and the maintenance-state constraint.
 - `ExceptionMapperTest`: validates JSON payloads and status codes for the custom and global exception mappers.
+- `DiscoveryResourceTest`: validates API metadata, contact information, and hypermedia resource links.
+
+## Video Demonstration Checklist
+Use Postman or curl and show the response status, JSON body, and console logging output where relevant.
+
+| Rubric area | Demonstrate |
+| --- | --- |
+| Part 1: Setup & Discovery | Start the server and call `GET /api/v1` to show version, contact, and resource links. |
+| Part 2: Room Management | Create a room with `201 Created`, fetch it, list rooms, delete an empty room with `204`, and show `409 Conflict` when deleting a room with sensors. |
+| Part 3: Sensors & Filtering | Create a sensor linked to an existing room, show `422` for a missing `roomId`, and filter with `GET /sensors?type=Temperature`. |
+| Part 4: Sub-Resources | Use `/sensors/{sensorId}/readings` to POST a reading, GET reading history, and show that the parent sensor `currentValue` changed. |
+| Part 5: Error Handling & Logging | Show `409`, `422`, `403`, `415`, and the request/response log entries containing method, URI, and status. |
+
+## Rubric Alignment Checklist
+
+| Criterion | Evidence in this project |
+| --- | --- |
+| 1.1 Architecture & Config | Maven WAR project using Jersey/JAX-RS only; `SmartCampusApplication` uses `@ApplicationPath("/api/v1")`; `InMemoryStorage` is bound as a singleton and synchronizes shared in-memory state. |
+| 1.2 Discovery Endpoint | `DiscoveryResource` returns version, base path, contact details, and resource links from `GET /api/v1`. |
+| 2.1 Room Implementation | `RoomResource` supports `GET /rooms`, `POST /rooms`, and `GET /rooms/{roomId}` with JSON responses and `Location` on creation. |
+| 2.2 Deletion & Safety Logic | `DELETE /rooms/{roomId}` returns `204` for empty rooms and throws `RoomNotEmptyException` mapped to `409` for rooms with sensors. |
+| 3.1 Sensor Integrity | `SensorResource` validates `roomId` before registration and maps missing linked rooms to `422 Unprocessable Entity`. |
+| 3.2 Filtered Retrieval | `GET /sensors?type=...` filters sensors by type using `@QueryParam`, with case-insensitive matching. |
+| 4.1 Sub-Resource Locator | `SensorResource#getSensorReadingResource` delegates `/sensors/{sensorId}/readings` to `SensorReadingResource`. |
+| 4.2 Historical Management | `SensorReadingResource` supports `GET` and `POST`; successful `POST` appends history and updates the parent sensor's `currentValue`. |
+| 5.1 Resource Conflict | `RoomNotEmptyExceptionMapper` returns `409 Conflict` with a JSON `ApiErrorResponse`. |
+| 5.2 Dependency Validation | `LinkedResourceNotFoundExceptionMapper` returns `422` with a JSON error body. |
+| 5.3 State Constraint | `SensorUnavailableExceptionMapper` returns `403 Forbidden` for readings posted to maintenance sensors. |
+| 5.4 Global Safety Net | `GlobalExceptionMapper` catches unexpected `Throwable` values and returns a generic JSON `500` without stack traces. |
+| 5.5 Logging Filters | `LoggingFilter` implements both request and response filters and logs HTTP method, URI, and status code. |
 
 ## Report Answers
 

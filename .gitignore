@@ -1,2 +1,4 @@
 .m2-repo/
 target/
+.idea/
+*.log

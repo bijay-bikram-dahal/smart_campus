@@ -42,6 +42,12 @@
             <version>${jersey.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>org.glassfish.jersey.containers</groupId>
+            <artifactId>jersey-container-grizzly2-http</artifactId>
+            <version>${jersey.version}</version>
+        </dependency>
+
         <!-- JSON Support -->
         <dependency>
             <groupId>org.glassfish.jersey.media</groupId>
@@ -98,6 +104,15 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
+            </plugin>
+
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <configuration>
+                    <mainClass>com.university.smartcampus.SmartCampusServerLauncher</mainClass>
+                </configuration>
             </plugin>
         </plugins>
     </build>
